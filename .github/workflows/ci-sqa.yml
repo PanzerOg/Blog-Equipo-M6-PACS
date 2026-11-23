@@ -1,0 +1,218 @@
+name: SQA CI - Pruebas Dinamicas y Calidad
+
+on:
+  push:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  backend-pruebas-sqa:
+    name: Backend - Unitarias, Integracion, Categorias y JaCoCo
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 17 y cache Maven
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+          cache-dependency-path: 'backend/pom.xml'
+
+      - name: Dar permiso de ejecucion a Maven Wrapper
+        run: chmod +x ./mvnw
+
+      - name: Compilacion limpia (clean test-compile)
+        run: ./mvnw -B clean test-compile
+
+      - name: 1. Ejecutar Pruebas Unitarias (@Tag("unitaria"))
+        run: ./mvnw -B test -Dgroups=unitaria -DfailIfNoTests=true
+
+      - name: 2. Ejecutar Pruebas de Integracion (@Tag("integracion"))
+        run: ./mvnw -B test -Dgroups=integracion -DfailIfNoTests=true
+
+      - name: 3. Ejecutar Pruebas por Categorias ISO 25010 (@Tag("categoria"))
+        run: ./mvnw -B test -Dgroups=categoria -DfailIfNoTests=true
+
+      - name: 4. Suite completa y reporte de cobertura JaCoCo
+        run: ./mvnw -B test jacoco:report
+
+      - name: Generar resumen de metricas CI y artefacto JSON
+        if: always()
+        run: |
+          python3 - << 'PY'
+          import glob, json, os, xml.etree.ElementTree as ET
+          from datetime import datetime, timezone
+
+          total = failures = errors = skipped = 0
+          suites = []
+          for path in sorted(glob.glob("target/surefire-reports/TEST-*.xml")):
+              try:
+                  root = ET.parse(path).getroot()
+                  t = int(root.attrib.get("tests", 0))
+                  f = int(root.attrib.get("failures", 0))
+                  e = int(root.attrib.get("errors", 0))
+                  s = int(root.attrib.get("skipped", 0))
+                  total += t
+                  failures += f
+                  errors += e
+                  skipped += s
+                  suites.append({
+                      "suite": root.attrib.get("name", os.path.basename(path)),
+                      "tests": t,
+                      "failures": f,
+                      "errors": e,
+                      "skipped": s,
+                      "time_sec": float(root.attrib.get("time", 0.0)),
+                  })
+              except Exception as exc:
+                  print(f"Aviso leyendo {path}: {exc}")
+
+          line_cov = branch_cov = None
+          jacoco_path = "target/site/jacoco/jacoco.xml"
+          if os.path.exists(jacoco_path):
+              jroot = ET.parse(jacoco_path).getroot()
+              for counter in jroot.findall("./counter"):
+                  ctype = counter.attrib.get("type")
+                  missed = int(counter.attrib.get("missed", 0))
+                  covered = int(counter.attrib.get("covered", 0))
+                  denom = missed + covered
+                  pct = round((covered / denom) * 100, 2) if denom > 0 else 0.0
+                  if ctype == "LINE":
+                      line_cov = pct
+                  elif ctype == "BRANCH":
+                      branch_cov = pct
+
+          passed = total - failures - errors - skipped
+          metrics = {
+              "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+              "repository": os.environ.get("GITHUB_REPOSITORY", ""),
+              "branch": os.environ.get("GITHUB_REF_NAME", ""),
+              "commit_sha": os.environ.get("GITHUB_SHA", ""),
+              "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+              "tests_total": total,
+              "tests_passed": passed,
+              "tests_failures": failures,
+              "tests_errors": errors,
+              "tests_skipped": skipped,
+              "line_coverage_pct": line_cov,
+              "branch_coverage_pct": branch_cov,
+              "suites": suites,
+          }
+
+          os.makedirs("target", exist_ok=True)
+          with open("target/sqa-ci-metrics.json", "w", encoding="utf-8") as out:
+              json.dump(metrics, out, indent=2, ensure_ascii=False)
+
+          summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_file:
+              with open(summary_file, "a", encoding="utf-8") as sf:
+                  sf.write("## Resumen SQA CI - Backend (Spring Boot + JUnit 5 + JaCoCo)\n\n")
+                  sf.write(f"- **Commit:** `{metrics['commit_sha'][:7]}` ({metrics['branch']})\n")
+                  sf.write(f"- **Pruebas Totales:** {total} | **Aprobadas:** {passed} | **Fallos:** {failures} | **Errores:** {errors} | **Omitidas:** {skipped}\n")
+                  sf.write(f"- **Cobertura Lineas (JaCoCo):** {line_cov if line_cov is not None else 'N/D'}%\n")
+                  sf.write(f"- **Cobertura Ramas (JaCoCo):** {branch_cov if branch_cov is not None else 'N/D'}%\n\n")
+                  if suites:
+                      sf.write("| Suite | Total | Fallos | Errores | Omitidas | Tiempo (s) |\n")
+                      sf.write("| :--- | ---: | ---: | ---: | ---: | ---: |\n")
+                      for s in suites:
+                          sf.write(f"| `{s['suite']}` | {s['tests']} | {s['failures']} | {s['errors']} | {s['skipped']} | {s['time_sec']} |\n")
+          PY
+
+      - name: Subir artefactos de pruebas y cobertura JaCoCo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqa-backend-reports
+          path: |
+            backend/target/surefire-reports
+            backend/target/site/jacoco
+            backend/target/sqa-ci-metrics.json
+          if-no-files-found: warn
+
+  frontend-validacion:
+    name: Frontend - Build Vue.js
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20 y cache npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Instalar dependencias (npm ci)
+        run: npm ci
+
+      - name: Compilar aplicacion Vue (npm run build)
+        run: npm run build
+
+      - name: Verificar lint diagnostico (npm run lint)
+        continue-on-error: true
+        run: npm run lint
+
+  notificar-discord:
+    name: Notificar resultado CI a Discord
+    needs: [ backend-pruebas-sqa, frontend-validacion ]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Enviar resumen a Discord Webhook
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          BACKEND_RESULT: ${{ needs.backend-pruebas-sqa.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-validacion.result }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.actor }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL no configurado; omitiendo notificacion."
+            exit 0
+          fi
+
+          python3 - << 'PY' > payload.json
+          import json, os
+
+          back = os.environ.get("BACKEND_RESULT", "unknown")
+          front = os.environ.get("FRONTEND_RESULT", "unknown")
+          ok = (back == "success" and front == "success")
+          color = 3066993 if ok else 15158332
+          status_label = "EXITOSO" if ok else "CON FALLOS"
+          msg = (os.environ.get("COMMIT_MSG") or "Ejecucion manual").splitlines()[0][:180]
+
+          payload = {
+              "username": "SQA CI/CD Bot",
+              "embeds": [{
+                  "title": f"Pipeline CI The Blog — {status_label}",
+                  "url": os.environ.get("RUN_URL", ""),
+                  "color": color,
+                  "fields": [
+                      {"name": "Rama", "value": os.environ.get("BRANCH_NAME", ""), "inline": True},
+                      {"name": "Autor", "value": os.environ.get("COMMIT_AUTHOR", ""), "inline": True},
+                      {"name": "Backend (Unit/Int/Cat + JaCoCo)", "value": back, "inline": True},
+                      {"name": "Frontend (Vue Build)", "value": front, "inline": True},
+                      {"name": "Commit", "value": msg, "inline": False},
+                  ],
+              }]
+          }
+          print(json.dumps(payload))
+          PY
+
+          curl -fsS -X POST -H "Content-Type: application/json" -d @payload.json "$DISCORD_WEBHOOK_URL"

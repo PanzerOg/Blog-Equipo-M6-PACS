@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.software.spring.model.Administrador;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
@@ -22,8 +23,10 @@ public class JsonAdministradorRepository implements AdministradorRepository {
     private final Path filePath;
     private final ObjectMapper objectMapper;
     
-    public JsonAdministradorRepository() {
-        this.filePath = Paths.get("./data/administrador.json");
+    public JsonAdministradorRepository(
+            @Value("${app.administradoresPath:./data/administrador.json}") String configuredPath
+    ) {
+        this.filePath = Paths.get(configuredPath);
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
