@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitor SQA en Tiempo Real — The Blog (Equipo M6)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --surface: #111827;
+      --surface-alt: #1e293b;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.14);
+      --green: #22c55e;
+      --green-soft: rgba(34, 197, 94, 0.16);
+      --yellow: #eab308;
+      --yellow-soft: rgba(234, 179, 8, 0.16);
+      --red: #ef4444;
+      --red-soft: rgba(239, 68, 68, 0.16);
+      --purple: #a78bfa;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: radial-gradient(circle at top right, #172554 0%, var(--bg) 45%);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+      padding: 24px;
+    }
+
+    .container { max-width: 1320px; margin: 0 auto; }
+
+    header {
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(8px);
+    }
+
+    .brand h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; }
+    .brand p { font-size: 0.9rem; color: var(--muted); margin-top: 4px; }
+
+    .header-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--surface-alt);
+    }
+
+    .gate-VERDE { background: var(--green-soft); color: #86efac; border-color: rgba(34, 197, 94, 0.45); }
+    .gate-AMARILLO { background: var(--yellow-soft); color: #fde047; border-color: rgba(234, 179, 8, 0.45); }
+    .gate-ROJO { background: var(--red-soft); color: #fca5a5; border-color: rgba(239, 68, 68, 0.45); }
+
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+
+    .links-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .btn-link {
+      text-decoration: none;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 0.84rem;
+      font-weight: 500;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .btn-link:hover { border-color: var(--accent); transform: translateY(-1px); color: var(--accent); }
+
+    button.btn-refresh {
+      cursor: pointer;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      padding: 7px 14px;
+      border-radius: 10px;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    .grid-kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    .kpi-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .kpi-value { font-size: 1.75rem; font-weight: 700; margin: 6px 0 4px; }
+    .kpi-sub { font-size: 0.82rem; color: var(--muted); }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-subtitle { font-size: 0.8rem; color: var(--muted); font-weight: 400; }
+
+    .iso-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      background: var(--surface-alt);
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 10px 0 6px;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      transition: width 0.35s ease;
+    }
+
+    .chart-box { position: relative; height: 270px; width: 100%; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.65);
+    }
+    th {
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: rgba(30, 41, 59, 0.55);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: var(--surface-alt);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+    }
+    a.inline-link { color: var(--accent); text-decoration: none; }
+    a.inline-link:hover { text-decoration: underline; }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-top: 22px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(51, 65, 85, 0.5);
+    }
+
+    @media (max-width: 540px) {
+      body { padding: 14px; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>Monitor SQA en Tiempo Real — The Blog (Equipo M6)</h1>
+        <p>Telemetria automatizada CI/CD · ISO/IEC 25010 (Adecuacion Funcional) · JaCoCo &amp; JUnit 5</p>
+      </div>
+      <div class="header-right">
+        <span id="sourceBadge" class="badge">Cargando datos...</span>
+        <span id="gateBadge" class="badge gate-AMARILLO"><span class="dot"></span><span>SEMAFORO: --</span></span>
+        <button class="btn-refresh" type="button" onclick="loadDashboard(true)">Actualizar ahora</button>
+      </div>
+    </header>
+
+    <nav class="links-bar" aria-label="Accesos del Ecosistema SQA">
+      <a class="btn-link" href="https://sqa-team-m6.atlassian.net/jira/software/projects/KAN/boards" target="_blank" rel="noopener">Tablero Jira (KAN)</a>
+      <a class="btn-link" href="https://sqa-team-m6.atlassian.net/wiki/spaces/SQA/pages/6717610" target="_blank" rel="noopener">Confluence Hub (Ecosistema)</a>
+      <a class="btn-link" href="https://docs.google.com/spreadsheets/d/1J43xxO0YiiuszPSXeSoiPlpE4fHGS6JPRqDo9Q19mVU/edit" target="_blank" rel="noopener">Google Sheets (Datos_CI_TiempoReal)</a>
+      <a class="btn-link" href="https://noashigod.github.io/Dashboard_SQA_M6_sheet/" target="_blank" rel="noopener">Dashboard Sheets Fase 1</a>
+      <a class="btn-link" href="https://github.com/PanzerOg/Blog-Equipo-M6-PACS/actions" target="_blank" rel="noopener">GitHub Actions CI</a>
+    </nav>
+
+    <section class="grid-kpis" aria-label="Indicadores Clave">
+      <article class="card">
+        <div class="kpi-label">Tasa de Aprobacion (ICR CI)</div>
+        <div class="kpi-value" id="kpiPassRate">--%</div>
+        <div class="kpi-sub" id="kpiPassDetail">Meta PACS: &gt;= 85%</div>
+      </article>
+      <article class="card">
+        <div class="kpi-label">Pruebas Totales / Fallidas</div>
+        <div class="kpi-value" id="kpiTests">--</div>
+        <div class="kpi-sub" id="kpiCatSummary">Unit -- | Int -- | Cat --</div>
+      </article>
+      <article class="card">
+        <div class="kpi-label">Cobertura Lineas (JaCoCo)</div>
+        <div class="kpi-value" id="kpiLineCov">--%</div>
+        <div class="kpi-sub">Piso CI: 30% · Meta Equipo: 60%</div>
+      </article>
+      <article class="card">
+        <div class="kpi-label">Cobertura Ramas (JaCoCo)</div>
+        <div class="kpi-value" id="kpiBranchCov">--%</div>
+        <div class="kpi-sub" id="kpiInstrClass">Instrucciones --% · Clases --%</div>
+      </article>
+      <article class="card">
+        <div class="kpi-label">Estado Jobs CI</div>
+        <div class="kpi-value" id="kpiCiJobs" style="font-size:1.25rem;">--</div>
+        <div class="kpi-sub" id="kpiLastCommit">Commit --</div>
+      </article>
+      <article class="card">
+        <div class="kpi-label">Ultima Actualizacion</div>
+        <div class="kpi-value" id="kpiUpdated" style="font-size:1.05rem;">--</div>
+        <div class="kpi-sub" id="kpiTotalRuns">Corridas registradas: --</div>
+      </article>
+    </section>
+
+    <section class="card" style="margin-bottom: 20px;">
+      <div class="section-title">
+        <span>Cobertura ISO/IEC 25010 — Caracteristica: Adecuacion Funcional</span>
+        <span class="section-subtitle">Desglose por @Tag en AdecuacionFuncionalCategoriaTest</span>
+      </div>
+      <div class="iso-grid" style="margin-bottom: 0;">
+        <div class="card" style="background: rgba(30, 41, 59, 0.45);">
+          <div class="kpi-label">Completitud Funcional (@Tag("completitud"))</div>
+          <div class="kpi-value" id="isoCompletitudVal" style="font-size:1.4rem;">--</div>
+          <div class="progress-track"><div id="isoCompletitudBar" class="progress-fill" style="width:0%"></div></div>
+          <div class="kpi-sub">Cobertura de tareas, endpoints y roles esperados</div>
+        </div>
+        <div class="card" style="background: rgba(30, 41, 59, 0.45);">
+          <div class="kpi-label">Correccion Funcional (@Tag("correccion"))</div>
+          <div class="kpi-value" id="isoCorreccionVal" style="font-size:1.4rem;">--</div>
+          <div class="progress-track"><div id="isoCorreccionBar" class="progress-fill" style="width:0%"></div></div>
+          <div class="kpi-sub">Precision en resultados, validaciones y reglas de negocio</div>
+        </div>
+        <div class="card" style="background: rgba(30, 41, 59, 0.45);">
+          <div class="kpi-label">Pertinencia Funcional (@Tag("pertinencia"))</div>
+          <div class="kpi-value" id="isoPertinenciaVal" style="font-size:1.4rem;">--</div>
+          <div class="progress-track"><div id="isoPertinenciaBar" class="progress-fill" style="width:0%"></div></div>
+          <div class="kpi-sub">Adecuacion al flujo academico real del usuario</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <article class="card">
+        <div class="section-title">
+          <span>Tendencia JaCoCo &amp; Pass Rate</span>
+          <span class="section-subtitle">Evolucion por commit</span>
+        </div>
+        <div class="chart-box"><canvas id="coverageChart"></canvas></div>
+      </article>
+      <article class="card">
+        <div class="section-title">
+          <span>Pruebas por Categoria (@Tag)</span>
+          <span class="section-subtitle">Unitarias, Integracion, ISO 25010</span>
+        </div>
+        <div class="chart-box"><canvas id="categoryChart"></canvas></div>
+      </article>
+    </section>
+
+    <section class="card" style="margin-bottom: 20px;">
+      <div class="section-title">
+        <span>Gobernanza SQA — 6 Procesos de Gestion (Seccion 13 del Proyecto)</span>
+        <span class="section-subtitle">Sincronizacion continua del ecosistema por rol</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Proceso</th>
+              <th>Lider Responsable</th>
+              <th>Automatizacion Activa</th>
+              <th>Evidencia / Fuente</th>
+              <th>Estado Actual</th>
+            </tr>
+          </thead>
+          <tbody id="processesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <article class="card">
+        <div class="section-title">
+          <span>Suites JUnit 5 — Ultima Ejecucion</span>
+          <span class="section-subtitle">Reportes Surefire XML</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Suite</th>
+                <th>Pruebas</th>
+                <th>Fallos/Err</th>
+                <th>Tiempo</th>
+              </tr>
+            </thead>
+            <tbody id="suitesBody"></tbody>
+          </table>
+        </div>
+      </article>
+      <article class="card">
+        <div class="section-title">
+          <span>Historial Reciente de Corridas CI</span>
+          <span class="section-subtitle">Ultimas ejecuciones registradas</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Commit</th>
+                <th>Rama / Autor</th>
+                <th>Semaforo</th>
+                <th>Pass</th>
+                <th>JaCoCo L/B</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <footer>
+      Universidad Catolica Andres Bello (UCAB) · Aseguramiento de la Calidad del Software 2026-2 · Equipo M6 (The Blog)
+    </footer>
+  </div>
+
+  <script>
+    const SEED_HISTORY = {
+      schema_version: "1.0",
+      project: "The Blog - Equipo M6 SQA (ISO/IEC 25010 - Adecuacion Funcional)",
+      updated_at_utc: "2026-11-23T23:25:00+00:00",
+      total_runs: 1,
+      runs: [
+        {
+          timestamp_utc: "2026-11-23T23:25:00+00:00",
+          branch: "main",
+          commit_short: "6a73263",
+          commit_message: "KAN-69 #comment Configurar CI/CD GitHub Actions con pruebas unitarias, integracion, categorias y JaCoCo",
+          actor: "PanzerOg",
+          run_url: "https://github.com/PanzerOg/Blog-Equipo-M6-PACS/actions",
+          tests_total: 9,
+          tests_passed: 9,
+          tests_failures: 0,
+          tests_errors: 0,
+          tests_skipped: 0,
+          pass_rate_pct: 100.0,
+          by_category: {
+            unitaria: { total: 3, passed: 3, failures: 0, errors: 0, skipped: 0 },
+            integracion: { total: 3, passed: 3, failures: 0, errors: 0, skipped: 0 },
+            categoria: { total: 3, passed: 3, failures: 0, errors: 0, skipped: 0 }
+          },
+          iso_25010_adecuacion_funcional: {
+            completitud: { total: 1, passed: 1, failed: 0, skipped: 0 },
+            correccion: { total: 1, passed: 1, failed: 0, skipped: 0 },
+            pertinencia: { total: 1, passed: 1, failed: 0, skipped: 0 }
+          },
+          line_coverage_pct: 39.71,
+          branch_coverage_pct: 19.61,
+          instruction_coverage_pct: 34.08,
+          method_coverage_pct: 39.07,
+          class_coverage_pct: 80.77,
+          backend_status: "success",
+          frontend_status: "success",
+          quality_gate: "VERDE",
+          suites: [
+            { suite: "com.software.spring.category.AdecuacionFuncionalCategoriaTest", tests: 3, passed: 3, failures: 0, errors: 0, skipped: 0, time_sec: 1.316 },
+            { suite: "com.software.spring.integration.AnuncioFlowIntegrationTest", tests: 3, passed: 3, failures: 0, errors: 0, skipped: 0, time_sec: 3.86 },
+            { suite: "com.software.spring.service.ComentarioServiceUnitTest", tests: 3, passed: 3, failures: 0, errors: 0, skipped: 0, time_sec: 0.068 }
+          ]
+        }
+      ]
+    };
+
+    let coverageChartInstance = null;
+    let categoryChartInstance = null;
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function fmtNum(val, suffix = "") {
+      return val === null || val === undefined || Number.isNaN(Number(val)) ? "N/D" : `${Number(val).toFixed(2).replace(/\.00$/, "")}${suffix}`;
+    }
+
+    function fmtUtc(iso) {
+      if (!iso) return "--";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+      return d.toLocaleString("es-VE", { dateStyle: "short", timeStyle: "short" });
+    }
+
+    function renderIsoCard(key, valId, barId, isoObj) {
+      const item = (isoObj && isoObj[key]) || { total: 0, passed: 0 };
+      const total = Number(item.total || 0);
+      const passed = Number(item.passed || 0);
+      const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+      document.getElementById(valId).textContent = `${passed}/${total} (${pct}%)`;
+      document.getElementById(barId).style.width = `${pct}%`;
+    }
+
+    function renderProcesses(latest) {
+      const gate = latest.quality_gate || "AMARILLO";
+      const gateClass = `gate-${gate}`;
+      const cov = Number(latest.line_coverage_pct || 0);
+      const rows = [
+        { p: "1. Planificacion", l: "Gabriel Lopez (Lider General)", m: "PACS + Backlog KAN sincronizado via MCP", e: "Jira & Confluence Hub", s: "ACTIVO", c: "gate-VERDE" },
+        { p: "2. Ejecucion", l: "Andres Cardozo (Lider Funcional)", m: "Disparo automatico @Tag unitaria / integracion / categoria", e: `Backend CI: ${latest.backend_status || "--"}`, s: (latest.backend_status || "N/D").toUpperCase(), c: latest.backend_status === "success" ? "gate-VERDE" : "gate-ROJO" },
+        { p: "3. Direccion", l: "Gabriel Lopez & Jose Montes de Oca", m: "Notificaciones Discord enriquecidas + commits trazados KAN", e: `Commit ${latest.commit_short || "--"}`, s: gate, c: gateClass },
+        { p: "4. Monitoreo", l: "Jose Montes de Oca (Lider DevOp)", m: "Colector Python + Webhook Google Sheets + gh-pages", e: "Datos_CI_TiempoReal", s: "EN LINEA", c: "gate-VERDE" },
+        { p: "5. Control", l: "Rebeca Lopez (Escriba-Auditora)", m: "Semaforo SQA + Artefactos Surefire y JaCoCo XML/HTML", e: `Pass Rate ${fmtNum(latest.pass_rate_pct, "%")}`, s: gate, c: gateClass },
+        { p: "6. Evaluacion", l: "Nahomi Abella (Lider de Metricas)", m: "Tendencia ISO/IEC 25010 (Completitud/Correccion/Pertinencia)", e: `Lineas JaCoCo ${fmtNum(cov, "%")}`, s: cov >= 30 ? "CONFORME" : "ALERTA", c: cov >= 30 ? "gate-VERDE" : "gate-AMARILLO" }
+      ];
+
+      document.getElementById("processesBody").innerHTML = rows.map(r => `
+        <tr>
+          <td><strong>${escapeHtml(r.p)}</strong></td>
+          <td>${escapeHtml(r.l)}</td>
+          <td>${escapeHtml(r.m)}</td>
+          <td><code>${escapeHtml(r.e)}</code></td>
+          <td><span class="badge ${escapeHtml(r.c)}">${escapeHtml(r.s)}</span></td>
+        </tr>
+      `).join("");
+    }
+
+    function renderCharts(runs) {
+      if (typeof window.Chart !== "function") return;
+      const labels = runs.map(r => r.commit_short || "run");
+
+      const covCtx = document.getElementById("coverageChart");
+      if (coverageChartInstance) coverageChartInstance.destroy();
+      coverageChartInstance = new Chart(covCtx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "JaCoCo Lineas (%)",
+              data: runs.map(r => r.line_coverage_pct ?? 0),
+              borderColor: "#38bdf8",
+              backgroundColor: "rgba(56, 189, 248, 0.15)",
+              tension: 0.25,
+              fill: true
+            },
+            {
+              label: "JaCoCo Ramas (%)",
+              data: runs.map(r => r.branch_coverage_pct ?? 0),
+              borderColor: "#a78bfa",
+              backgroundColor: "rgba(167, 139, 250, 0.12)",
+              tension: 0.25,
+              fill: false
+            },
+            {
+              label: "Pass Rate (%)",
+              data: runs.map(r => r.pass_rate_pct ?? 0),
+              borderColor: "#22c55e",
+              borderDash: [5, 5],
+              tension: 0.2,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { min: 0, max: 100, ticks: { color: "#94a3b8" }, grid: { color: "rgba(51,65,85,0.45)" } },
+            x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(51,65,85,0.25)" } }
+          },
+          plugins: { legend: { labels: { color: "#e2e8f0" } } }
+        }
+      });
+
+      const catCtx = document.getElementById("categoryChart");
+      if (categoryChartInstance) categoryChartInstance.destroy();
+      categoryChartInstance = new Chart(catCtx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            { label: "Unitarias", data: runs.map(r => r.by_category?.unitaria?.passed ?? 0), backgroundColor: "#38bdf8" },
+            { label: "Integracion", data: runs.map(r => r.by_category?.integracion?.passed ?? 0), backgroundColor: "#a78bfa" },
+            { label: "Categorias ISO 25010", data: runs.map(r => r.by_category?.categoria?.passed ?? 0), backgroundColor: "#22c55e" }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { stacked: true, ticks: { color: "#94a3b8" }, grid: { color: "rgba(51,65,85,0.25)" } },
+            y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1, color: "#94a3b8" }, grid: { color: "rgba(51,65,85,0.45)" } }
+          },
+          plugins: { legend: { labels: { color: "#e2e8f0" } } }
+        }
+      });
+    }
+
+    function renderDashboard(history, sourceLabel) {
+      const runs = Array.isArray(history.runs) && history.runs.length > 0 ? history.runs : SEED_HISTORY.runs;
+      const latest = runs[runs.length - 1];
+      const gate = latest.quality_gate || "AMARILLO";
+
+      const sourceEl = document.getElementById("sourceBadge");
+      sourceEl.textContent = sourceLabel;
+
+      const gateEl = document.getElementById("gateBadge");
+      gateEl.className = `badge gate-${gate}`;
+      gateEl.innerHTML = `<span class="dot"></span><span>SEMAFORO: ${escapeHtml(gate)}</span>`;
+
+      document.getElementById("kpiPassRate").textContent = fmtNum(latest.pass_rate_pct, "%");
+      document.getElementById("kpiPassDetail").textContent = `${latest.tests_passed ?? 0} aprobadas de ${latest.tests_total ?? 0} · Meta >= 85%`;
+
+      const failed = Number(latest.tests_failures || 0) + Number(latest.tests_errors || 0);
+      document.getElementById("kpiTests").textContent = `${latest.tests_total ?? 0} / ${failed}`;
+      const cat = latest.by_category || {};
+      document.getElementById("kpiCatSummary").textContent =
+        `Unit ${cat.unitaria?.passed ?? 0}/${cat.unitaria?.total ?? 0} | ` +
+        `Int ${cat.integracion?.passed ?? 0}/${cat.integracion?.total ?? 0} | ` +
+        `Cat ${cat.categoria?.passed ?? 0}/${cat.categoria?.total ?? 0}`;
+
+      document.getElementById("kpiLineCov").textContent = fmtNum(latest.line_coverage_pct, "%");
+      document.getElementById("kpiBranchCov").textContent = fmtNum(latest.branch_coverage_pct, "%");
+      document.getElementById("kpiInstrClass").textContent =
+        `Instr ${fmtNum(latest.instruction_coverage_pct, "%")} · Clases ${fmtNum(latest.class_coverage_pct, "%")}`;
+
+      document.getElementById("kpiCiJobs").textContent =
+        `Back: ${latest.backend_status || "--"} · Front: ${latest.frontend_status || "--"}`;
+      document.getElementById("kpiLastCommit").textContent =
+        `${latest.commit_short || "--"} (${latest.branch || "main"}) por ${latest.actor || "--"}`;
+
+      document.getElementById("kpiUpdated").textContent = fmtUtc(latest.timestamp_utc);
+      document.getElementById("kpiTotalRuns").textContent = `Corridas registradas: ${runs.length}`;
+
+      const iso = latest.iso_25010_adecuacion_funcional || {};
+      renderIsoCard("completitud", "isoCompletitudVal", "isoCompletitudBar", iso);
+      renderIsoCard("correccion", "isoCorreccionVal", "isoCorreccionBar", iso);
+      renderIsoCard("pertinencia", "isoPertinenciaVal", "isoPertinenciaBar", iso);
+
+      renderProcesses(latest);
+
+      const suites = Array.isArray(latest.suites) ? latest.suites : [];
+      document.getElementById("suitesBody").innerHTML = suites.length
+        ? suites.map(s => `
+            <tr>
+              <td><code>${escapeHtml(String(s.suite || "").split(".").slice(-2).join("."))}</code></td>
+              <td>${Number(s.tests || 0)}</td>
+              <td>${Number(s.failures || 0) + Number(s.errors || 0)}</td>
+              <td>${fmtNum(s.time_sec, " s")}</td>
+            </tr>
+          `).join("")
+        : `<tr><td colspan="4" style="color:var(--muted)">Sin detalle de suites en esta corrida.</td></tr>`;
+
+      const recent = runs.slice(-15).reverse();
+      document.getElementById("historyBody").innerHTML = recent.map(r => {
+        const g = r.quality_gate || "AMARILLO";
+        const link = r.run_url
+          ? `<a class="inline-link" href="${escapeHtml(r.run_url)}" target="_blank" rel="noopener"><code>${escapeHtml(r.commit_short || "run")}</code></a>`
+          : `<code>${escapeHtml(r.commit_short || "run")}</code>`;
+        return `
+          <tr>
+            <td>${link}</td>
+            <td>${escapeHtml(r.branch || "main")} · ${escapeHtml(r.actor || "--")}</td>
+            <td><span class="badge gate-${escapeHtml(g)}">${escapeHtml(g)}</span></td>
+            <td>${r.tests_passed ?? 0}/${r.tests_total ?? 0}</td>
+            <td>${fmtNum(r.line_coverage_pct, "%")} / ${fmtNum(r.branch_coverage_pct, "%")}</td>
+          </tr>
+        `;
+      }).join("");
+
+      renderCharts(runs);
+    }
+
+    async function loadDashboard(manual = false) {
+      try {
+        const res = await fetch(`./data/metrics-history.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderDashboard(data, manual ? "En vivo (actualizado)" : "En vivo (gh-pages)");
+      } catch (_err) {
+        renderDashboard(SEED_HISTORY, "Modo offline / Seed local");
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      loadDashboard(false);
+      setInterval(() => loadDashboard(false), 60000);
+    });
+  </script>
+</body>
+</html>

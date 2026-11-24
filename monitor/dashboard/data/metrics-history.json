@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "project": "The Blog - Equipo M6 SQA (ISO/IEC 25010 - Adecuacion Funcional)",
+  "updated_at_utc": "2026-11-23T23:25:00+00:00",
+  "total_runs": 1,
+  "runs": [
+    {
+      "schema_version": "1.0",
+      "timestamp_utc": "2026-11-23T23:25:00+00:00",
+      "repository": "PanzerOg/Blog-Equipo-M6-PACS",
+      "branch": "main",
+      "commit_sha": "6a73263",
+      "commit_short": "6a73263",
+      "commit_message": "KAN-69 #comment Configurar CI/CD GitHub Actions con pruebas unitarias, integracion, categorias y JaCoCo",
+      "actor": "PanzerOg",
+      "run_id": "seed-run-1",
+      "run_number": 1,
+      "run_url": "https://github.com/PanzerOg/Blog-Equipo-M6-PACS/actions",
+      "tests_total": 9,
+      "tests_passed": 9,
+      "tests_failures": 0,
+      "tests_errors": 0,
+      "tests_skipped": 0,
+      "pass_rate_pct": 100.0,
+      "by_category": {
+        "unitaria": { "total": 3, "passed": 3, "failures": 0, "errors": 0, "skipped": 0 },
+        "integracion": { "total": 3, "passed": 3, "failures": 0, "errors": 0, "skipped": 0 },
+        "categoria": { "total": 3, "passed": 3, "failures": 0, "errors": 0, "skipped": 0 }
+      },
+      "iso_25010_adecuacion_funcional": {
+        "completitud": { "total": 1, "passed": 1, "failed": 0, "skipped": 0 },
+        "correccion": { "total": 1, "passed": 1, "failed": 0, "skipped": 0 },
+        "pertinencia": { "total": 1, "passed": 1, "failed": 0, "skipped": 0 }
+      },
+      "line_coverage_pct": 39.71,
+      "branch_coverage_pct": 19.61,
+      "instruction_coverage_pct": 34.08,
+      "method_coverage_pct": 39.07,
+      "class_coverage_pct": 80.77,
+      "backend_status": "success",
+      "frontend_status": "success",
+      "quality_gate": "VERDE",
+      "suites": [
+        { "suite": "com.software.spring.category.AdecuacionFuncionalCategoriaTest", "tests": 3, "passed": 3, "failures": 0, "errors": 0, "skipped": 0, "time_sec": 1.316 },
+        { "suite": "com.software.spring.integration.AnuncioFlowIntegrationTest", "tests": 3, "passed": 3, "failures": 0, "errors": 0, "skipped": 0, "time_sec": 3.86 },
+        { "suite": "com.software.spring.service.ComentarioServiceUnitTest", "tests": 3, "passed": 3, "failures": 0, "errors": 0, "skipped": 0, "time_sec": 0.068 }
+      ]
+    }
+  ]
+}

@@ -2,9 +2,14 @@ name: SQA CI - Pruebas Dinamicas y Calidad
 
 on:
   push:
+    branches-ignore:
+      - gh-pages
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   backend-pruebas-sqa:
@@ -30,101 +35,52 @@ jobs:
         run: chmod +x ./mvnw
 
       - name: Compilacion limpia (clean test-compile)
+        id: compile
         run: ./mvnw -B clean test-compile
 
       - name: 1. Ejecutar Pruebas Unitarias (@Tag("unitaria"))
-        run: ./mvnw -B test -Dgroups=unitaria -DfailIfNoTests=true
+        if: steps.compile.outcome == 'success'
+        run: |
+          set +e
+          ./mvnw -B test -Dgroups=unitaria -DfailIfNoTests=true
+          STATUS=$?
+          mkdir -p target/sqa-reports/unitaria
+          cp -f target/surefire-reports/TEST-*.xml target/sqa-reports/unitaria/ 2>/dev/null || true
+          exit $STATUS
 
       - name: 2. Ejecutar Pruebas de Integracion (@Tag("integracion"))
-        run: ./mvnw -B test -Dgroups=integracion -DfailIfNoTests=true
+        if: steps.compile.outcome == 'success' && !cancelled()
+        run: |
+          set +e
+          rm -rf target/surefire-reports
+          ./mvnw -B test -Dgroups=integracion -DfailIfNoTests=true
+          STATUS=$?
+          mkdir -p target/sqa-reports/integracion
+          cp -f target/surefire-reports/TEST-*.xml target/sqa-reports/integracion/ 2>/dev/null || true
+          exit $STATUS
 
       - name: 3. Ejecutar Pruebas por Categorias ISO 25010 (@Tag("categoria"))
-        run: ./mvnw -B test -Dgroups=categoria -DfailIfNoTests=true
+        if: steps.compile.outcome == 'success' && !cancelled()
+        run: |
+          set +e
+          rm -rf target/surefire-reports
+          ./mvnw -B test -Dgroups=categoria -DfailIfNoTests=true
+          STATUS=$?
+          mkdir -p target/sqa-reports/categoria
+          cp -f target/surefire-reports/TEST-*.xml target/sqa-reports/categoria/ 2>/dev/null || true
+          exit $STATUS
 
       - name: 4. Suite completa y reporte de cobertura JaCoCo
-        run: ./mvnw -B test jacoco:report
+        if: steps.compile.outcome == 'success' && !cancelled()
+        run: |
+          rm -rf target/surefire-reports target/jacoco.exec
+          ./mvnw -B test jacoco:report
 
       - name: Generar resumen de metricas CI y artefacto JSON
         if: always()
-        run: |
-          python3 - << 'PY'
-          import glob, json, os, xml.etree.ElementTree as ET
-          from datetime import datetime, timezone
-
-          total = failures = errors = skipped = 0
-          suites = []
-          for path in sorted(glob.glob("target/surefire-reports/TEST-*.xml")):
-              try:
-                  root = ET.parse(path).getroot()
-                  t = int(root.attrib.get("tests", 0))
-                  f = int(root.attrib.get("failures", 0))
-                  e = int(root.attrib.get("errors", 0))
-                  s = int(root.attrib.get("skipped", 0))
-                  total += t
-                  failures += f
-                  errors += e
-                  skipped += s
-                  suites.append({
-                      "suite": root.attrib.get("name", os.path.basename(path)),
-                      "tests": t,
-                      "failures": f,
-                      "errors": e,
-                      "skipped": s,
-                      "time_sec": float(root.attrib.get("time", 0.0)),
-                  })
-              except Exception as exc:
-                  print(f"Aviso leyendo {path}: {exc}")
-
-          line_cov = branch_cov = None
-          jacoco_path = "target/site/jacoco/jacoco.xml"
-          if os.path.exists(jacoco_path):
-              jroot = ET.parse(jacoco_path).getroot()
-              for counter in jroot.findall("./counter"):
-                  ctype = counter.attrib.get("type")
-                  missed = int(counter.attrib.get("missed", 0))
-                  covered = int(counter.attrib.get("covered", 0))
-                  denom = missed + covered
-                  pct = round((covered / denom) * 100, 2) if denom > 0 else 0.0
-                  if ctype == "LINE":
-                      line_cov = pct
-                  elif ctype == "BRANCH":
-                      branch_cov = pct
-
-          passed = total - failures - errors - skipped
-          metrics = {
-              "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-              "repository": os.environ.get("GITHUB_REPOSITORY", ""),
-              "branch": os.environ.get("GITHUB_REF_NAME", ""),
-              "commit_sha": os.environ.get("GITHUB_SHA", ""),
-              "run_id": os.environ.get("GITHUB_RUN_ID", ""),
-              "tests_total": total,
-              "tests_passed": passed,
-              "tests_failures": failures,
-              "tests_errors": errors,
-              "tests_skipped": skipped,
-              "line_coverage_pct": line_cov,
-              "branch_coverage_pct": branch_cov,
-              "suites": suites,
-          }
-
-          os.makedirs("target", exist_ok=True)
-          with open("target/sqa-ci-metrics.json", "w", encoding="utf-8") as out:
-              json.dump(metrics, out, indent=2, ensure_ascii=False)
-
-          summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
-          if summary_file:
-              with open(summary_file, "a", encoding="utf-8") as sf:
-                  sf.write("## Resumen SQA CI - Backend (Spring Boot + JUnit 5 + JaCoCo)\n\n")
-                  sf.write(f"- **Commit:** `{metrics['commit_sha'][:7]}` ({metrics['branch']})\n")
-                  sf.write(f"- **Pruebas Totales:** {total} | **Aprobadas:** {passed} | **Fallos:** {failures} | **Errores:** {errors} | **Omitidas:** {skipped}\n")
-                  sf.write(f"- **Cobertura Lineas (JaCoCo):** {line_cov if line_cov is not None else 'N/D'}%\n")
-                  sf.write(f"- **Cobertura Ramas (JaCoCo):** {branch_cov if branch_cov is not None else 'N/D'}%\n\n")
-                  if suites:
-                      sf.write("| Suite | Total | Fallos | Errores | Omitidas | Tiempo (s) |\n")
-                      sf.write("| :--- | ---: | ---: | ---: | ---: | ---: |\n")
-                      for s in suites:
-                          sf.write(f"| `{s['suite']}` | {s['tests']} | {s['failures']} | {s['errors']} | {s['skipped']} | {s['time_sec']} |\n")
-          PY
+        env:
+          GITHUB_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: python3 ../scripts/collect_ci_metrics.py --backend-dir . --output target/sqa-ci-metrics.json --write-summary
 
       - name: Subir artefactos de pruebas y cobertura JaCoCo
         if: always()
@@ -133,6 +89,7 @@ jobs:
           name: sqa-backend-reports
           path: |
             backend/target/surefire-reports
+            backend/target/sqa-reports
             backend/target/site/jacoco
             backend/target/sqa-ci-metrics.json
           if-no-files-found: warn
@@ -165,18 +122,134 @@ jobs:
         continue-on-error: true
         run: npm run lint
 
+  publicar-monitor-vivo:
+    name: Publicar Monitor en Tiempo Real (Sheets + Pages)
+    needs: [ backend-pruebas-sqa, frontend-validacion ]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v5
+
+      - name: Descargar artefactos CI del backend
+        uses: actions/download-artifact@v8
+        with:
+          name: sqa-backend-reports
+          path: artifacts-ci
+        continue-on-error: true
+
+      - name: Consolidar metricas finales y Semaforo SQA
+        env:
+          BACKEND_RESULT: ${{ needs.backend-pruebas-sqa.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-validacion.result }}
+          GITHUB_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          METRICS_FILE=$(find artifacts-ci -name sqa-ci-metrics.json 2>/dev/null | head -n 1 || true)
+          if [ -n "$METRICS_FILE" ] && [ -f "$METRICS_FILE" ]; then
+            python3 scripts/collect_ci_metrics.py \
+              --input "$METRICS_FILE" \
+              --output final-sqa-metrics.json \
+              --backend-status "$BACKEND_RESULT" \
+              --frontend-status "$FRONTEND_RESULT"
+          else
+            python3 scripts/collect_ci_metrics.py \
+              --backend-dir backend \
+              --output final-sqa-metrics.json \
+              --backend-status "$BACKEND_RESULT" \
+              --frontend-status "$FRONTEND_RESULT"
+          fi
+
+      - name: Subir artefacto consolidado para Discord y auditoria
+        uses: actions/upload-artifact@v6
+        with:
+          name: sqa-final-metrics
+          path: final-sqa-metrics.json
+          if-no-files-found: warn
+
+      - name: Enviar telemetria a Google Sheets Webhook
+        env:
+          GSHEETS_WEBHOOK_URL: ${{ secrets.GSHEETS_WEBHOOK_URL }}
+          GSHEETS_WEBHOOK_TOKEN: ${{ secrets.GSHEETS_WEBHOOK_TOKEN }}
+        run: |
+          if [ -z "$GSHEETS_WEBHOOK_URL" ]; then
+            echo "GSHEETS_WEBHOOK_URL no configurado; omitiendo sincronizacion con Google Sheets."
+            exit 0
+          fi
+
+          python3 - << 'PY'
+          import json, os
+          with open("final-sqa-metrics.json", "r", encoding="utf-8") as fh:
+              data = json.load(fh)
+          token = os.environ.get("GSHEETS_WEBHOOK_TOKEN", "").strip()
+          if token:
+              data["token"] = token
+          with open("payload_gsheets.json", "w", encoding="utf-8") as out:
+              json.dump(data, out, ensure_ascii=False)
+          PY
+
+          curl -fsSL -H "Content-Type: application/json" --data-binary @payload_gsheets.json "$GSHEETS_WEBHOOK_URL"
+          echo ""
+
+      - name: Publicar Monitor Web en rama gh-pages
+        if: ${{ !cancelled() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          WORK_DIR="/tmp/gh-pages"
+          rm -rf "$WORK_DIR"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$WORK_DIR"
+          else
+            mkdir -p "$WORK_DIR"
+            git -C "$WORK_DIR" init -b gh-pages
+            git -C "$WORK_DIR" remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          fi
+
+          mkdir -p "$WORK_DIR/data"
+          if [ ! -f "$WORK_DIR/data/metrics-history.json" ] && [ -f "monitor/dashboard/data/metrics-history.json" ]; then
+            cp -f monitor/dashboard/data/metrics-history.json "$WORK_DIR/data/metrics-history.json"
+          fi
+
+          cp -f monitor/dashboard/index.html "$WORK_DIR/index.html"
+          touch "$WORK_DIR/.nojekyll"
+
+          python3 scripts/collect_ci_metrics.py \
+            --input final-sqa-metrics.json \
+            --append-history "$WORK_DIR/data/metrics-history.json" \
+            --latest-output "$WORK_DIR/data/latest-metrics.json"
+
+          git -C "$WORK_DIR" add index.html .nojekyll data/metrics-history.json data/latest-metrics.json
+          if git -C "$WORK_DIR" diff --cached --quiet; then
+            echo "Sin cambios nuevos para publicar en gh-pages."
+          else
+            git -C "$WORK_DIR" commit -m "chore(monitor): actualizar metricas SQA (${GITHUB_SHA::7})"
+            git -C "$WORK_DIR" push -u origin gh-pages
+          fi
+
   notificar-discord:
     name: Notificar resultado CI a Discord
-    needs: [ backend-pruebas-sqa, frontend-validacion ]
+    needs: [ backend-pruebas-sqa, frontend-validacion, publicar-monitor-vivo ]
     if: always()
     runs-on: ubuntu-latest
 
     steps:
-      - name: Enviar resumen a Discord Webhook
+      - name: Descargar metricas consolidadas
+        uses: actions/download-artifact@v8
+        with:
+          name: sqa-final-metrics
+          path: artifacts-final
+        continue-on-error: true
+
+      - name: Enviar resumen enriquecido a Discord Webhook
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           BACKEND_RESULT: ${{ needs.backend-pruebas-sqa.result }}
           FRONTEND_RESULT: ${{ needs.frontend-validacion.result }}
+          MONITOR_RESULT: ${{ needs.publicar-monitor-vivo.result }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
           COMMIT_AUTHOR: ${{ github.actor }}
           BRANCH_NAME: ${{ github.ref_name }}
@@ -188,28 +261,57 @@ jobs:
           fi
 
           python3 - << 'PY' > payload.json
-          import json, os
+          import glob, json, os
 
           back = os.environ.get("BACKEND_RESULT", "unknown")
           front = os.environ.get("FRONTEND_RESULT", "unknown")
-          ok = (back == "success" and front == "success")
-          color = 3066993 if ok else 15158332
-          status_label = "EXITOSO" if ok else "CON FALLOS"
-          msg = (os.environ.get("COMMIT_MSG") or "Ejecucion manual").splitlines()[0][:180]
+          mon = os.environ.get("MONITOR_RESULT", "unknown")
+
+          metrics = {}
+          found = glob.glob("artifacts-final/**/final-sqa-metrics.json", recursive=True)
+          if found:
+              with open(found[0], "r", encoding="utf-8") as fh:
+                  metrics = json.load(fh)
+
+          gate = metrics.get("quality_gate")
+          if not gate:
+              gate = "VERDE" if (back == "success" and front == "success") else "ROJO"
+
+          colors = {"VERDE": 3066993, "AMARILLO": 16776960, "ROJO": 15158332}
+          color = colors.get(gate, 15158332)
+          raw_msg = (os.environ.get("COMMIT_MSG") or "").strip()
+          msg = raw_msg.splitlines()[0][:180] if raw_msg else "Ejecucion manual"
+
+          by_cat = metrics.get("by_category", {})
+          uni = by_cat.get("unitaria", {})
+          integ = by_cat.get("integracion", {})
+          cat = by_cat.get("categoria", {})
+          line_cov = metrics.get("line_coverage_pct")
+          branch_cov = metrics.get("branch_coverage_pct")
+          pass_rate = metrics.get("pass_rate_pct")
+
+          fields = [
+              {"name": "Semaforo SQA", "value": gate, "inline": True},
+              {"name": "Rama", "value": os.environ.get("BRANCH_NAME", ""), "inline": True},
+              {"name": "Autor", "value": os.environ.get("COMMIT_AUTHOR", ""), "inline": True},
+              {"name": "Unitarias", "value": f"{uni.get('passed', 0)}/{uni.get('total', 0)}", "inline": True},
+              {"name": "Integracion", "value": f"{integ.get('passed', 0)}/{integ.get('total', 0)}", "inline": True},
+              {"name": "Categorias ISO 25010", "value": f"{cat.get('passed', 0)}/{cat.get('total', 0)}", "inline": True},
+              {"name": "Pass Rate (ICR CI)", "value": f"{pass_rate}%" if pass_rate is not None else "N/D", "inline": True},
+              {"name": "JaCoCo Lineas", "value": f"{line_cov}%" if line_cov is not None else "N/D", "inline": True},
+              {"name": "JaCoCo Ramas", "value": f"{branch_cov}%" if branch_cov is not None else "N/D", "inline": True},
+              {"name": "Jobs CI", "value": f"Back: `{back}` | Front: `{front}` | Monitor: `{mon}`", "inline": False},
+              {"name": "Monitor Web en Tiempo Real", "value": "https://panzerog.github.io/Blog-Equipo-M6-PACS/", "inline": False},
+              {"name": "Commit", "value": msg, "inline": False},
+          ]
 
           payload = {
               "username": "SQA CI/CD Bot",
               "embeds": [{
-                  "title": f"Pipeline CI The Blog — {status_label}",
+                  "title": f"Pipeline CI The Blog — {gate}",
                   "url": os.environ.get("RUN_URL", ""),
                   "color": color,
-                  "fields": [
-                      {"name": "Rama", "value": os.environ.get("BRANCH_NAME", ""), "inline": True},
-                      {"name": "Autor", "value": os.environ.get("COMMIT_AUTHOR", ""), "inline": True},
-                      {"name": "Backend (Unit/Int/Cat + JaCoCo)", "value": back, "inline": True},
-                      {"name": "Frontend (Vue Build)", "value": front, "inline": True},
-                      {"name": "Commit", "value": msg, "inline": False},
-                  ],
+                  "fields": fields,
               }]
           }
           print(json.dumps(payload))
