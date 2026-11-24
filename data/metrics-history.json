@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "project": "The Blog - Equipo M6 SQA (ISO/IEC 25010 - Adecuacion Funcional)",
-  "updated_at_utc": "2026-11-24T00:40:19.777934+00:00",
-  "total_runs": 2,
+  "updated_at_utc": "2026-11-24T02:19:41.186174+00:00",
+  "total_runs": 3,
   "runs": [
     {
       "schema_version": "1.0",
@@ -234,6 +234,143 @@
           "errors": 0,
           "skipped": 0,
           "time_sec": 0.124
+        }
+      ],
+      "backend_status": "success",
+      "frontend_status": "success",
+      "quality_gate": "VERDE"
+    },
+    {
+      "schema_version": "1.0",
+      "timestamp_utc": "2026-11-24T02:19:26.779255+00:00",
+      "repository": "PanzerOg/Blog-Equipo-M6-PACS",
+      "branch": "main",
+      "commit_sha": "99acd74263ba28d624b5dbc9b275776fe1210bce",
+      "commit_short": "99acd74",
+      "commit_message": "KAN-69 #comment Entregar Fase 5: Arquitectura UML, Autoevaluacion ISO 25010/25059 y Manual Maestro",
+      "actor": "PanzerOg",
+      "run_id": "45311463407",
+      "run_number": 4,
+      "run_url": "https://github.com/PanzerOg/Blog-Equipo-M6-PACS/actions/runs/45311463407",
+      "tests_total": 9,
+      "tests_passed": 9,
+      "tests_failures": 0,
+      "tests_errors": 0,
+      "tests_skipped": 0,
+      "pass_rate_pct": 100.0,
+      "by_category": {
+        "unitaria": {
+          "total": 3,
+          "passed": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "integracion": {
+          "total": 3,
+          "passed": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "categoria": {
+          "total": 3,
+          "passed": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "iso_25010_adecuacion_funcional": {
+        "completitud": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0
+        },
+        "correccion": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0
+        },
+        "pertinencia": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "line_coverage_pct": 38.14,
+      "branch_coverage_pct": 16.67,
+      "instruction_coverage_pct": 32.09,
+      "method_coverage_pct": 37.63,
+      "class_coverage_pct": 80.77,
+      "jacoco": {
+        "INSTRUCTION": {
+          "covered": 1130,
+          "missed": 2391,
+          "total": 3521,
+          "pct": 32.09
+        },
+        "BRANCH": {
+          "covered": 34,
+          "missed": 170,
+          "total": 204,
+          "pct": 16.67
+        },
+        "LINE": {
+          "covered": 341,
+          "missed": 553,
+          "total": 894,
+          "pct": 38.14
+        },
+        "COMPLEXITY": {
+          "covered": 108,
+          "missed": 273,
+          "total": 381,
+          "pct": 28.35
+        },
+        "METHOD": {
+          "covered": 105,
+          "missed": 174,
+          "total": 279,
+          "pct": 37.63
+        },
+        "CLASS": {
+          "covered": 42,
+          "missed": 10,
+          "total": 52,
+          "pct": 80.77
+        }
+      },
+      "suites": [
+        {
+          "suite": "com.software.spring.category.AdecuacionFuncionalCategoriaTest",
+          "tests": 3,
+          "passed": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "time_sec": 0.783
+        },
+        {
+          "suite": "com.software.spring.integration.AnuncioFlowIntegrationTest",
+          "tests": 3,
+          "passed": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "time_sec": 2.026
+        },
+        {
+          "suite": "com.software.spring.service.ComentarioServiceUnitTest",
+          "tests": 3,
+          "passed": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "time_sec": 0.068
         }
       ],
       "backend_status": "success",

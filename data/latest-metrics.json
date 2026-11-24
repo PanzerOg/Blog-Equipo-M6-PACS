@@ -1,15 +1,15 @@
 {
   "schema_version": "1.0",
-  "timestamp_utc": "2026-11-24T00:40:05.999524+00:00",
+  "timestamp_utc": "2026-11-24T02:19:26.779255+00:00",
   "repository": "PanzerOg/Blog-Equipo-M6-PACS",
   "branch": "main",
-  "commit_sha": "10a933560f0d5c0c00d9b6064c47452ec9469da3",
-  "commit_short": "10a9335",
-  "commit_message": "KAN-69 #comment Implementar Fase 4: Monitor SQA en tiempo real hacia Google Sheets, gh-pages y Discord",
+  "commit_sha": "99acd74263ba28d624b5dbc9b275776fe1210bce",
+  "commit_short": "99acd74",
+  "commit_message": "KAN-69 #comment Entregar Fase 5: Arquitectura UML, Autoevaluacion ISO 25010/25059 y Manual Maestro",
   "actor": "PanzerOg",
-  "run_id": "45298882026",
-  "run_number": 3,
-  "run_url": "https://github.com/PanzerOg/Blog-Equipo-M6-PACS/actions/runs/45298882026",
+  "run_id": "45311463407",
+  "run_number": 4,
+  "run_url": "https://github.com/PanzerOg/Blog-Equipo-M6-PACS/actions/runs/45311463407",
   "tests_total": 9,
   "tests_passed": 9,
   "tests_failures": 0,
@@ -110,7 +110,7 @@
       "failures": 0,
       "errors": 0,
       "skipped": 0,
-      "time_sec": 1.943
+      "time_sec": 0.783
     },
     {
       "suite": "com.software.spring.integration.AnuncioFlowIntegrationTest",
@@ -119,7 +119,7 @@
       "failures": 0,
       "errors": 0,
       "skipped": 0,
-      "time_sec": 5.321
+      "time_sec": 2.026
     },
     {
       "suite": "com.software.spring.service.ComentarioServiceUnitTest",
@@ -128,7 +128,7 @@
       "failures": 0,
       "errors": 0,
       "skipped": 0,
-      "time_sec": 0.124
+      "time_sec": 0.068
     }
   ],
   "backend_status": "success",
